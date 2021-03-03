@@ -36,6 +36,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
+            "pyt = ptpython.entry_points.run_ptpython:run",
             "ptpython = ptpython.entry_points.run_ptpython:run",
             "ptipython = ptpython.entry_points.run_ptipython:run",
             "ptpython%s = ptpython.entry_points.run_ptpython:run" % sys.version_info[0],

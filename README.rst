@@ -18,6 +18,11 @@ BSD, OS X and Windows).
 Note: this version of ptpython requires at least Python 3.6. Install ptpython
 2.0.5 for older Python versions.
 
+What this forks covers
+**********************
+
+This fork integrates ptpython with `rich <https://github.com/willmcgugan/rich>`_ to display output and traceback.
+
 
 Installation
 ************

@@ -285,6 +285,7 @@ class PythonInput:
         # Pager.
         self.enable_output_formatting: bool = False
         self.enable_pager: bool = False
+        self.show_locals: bool = True
 
         # When the sidebar is visible, also show the help text.
         self.show_sidebar_help: bool = True
@@ -770,6 +771,11 @@ class PythonInput:
                         description="Use a pager for displaying outputs that don't "
                         "fit on the screen.",
                         field_name="enable_pager",
+                    ),
+                    simple_option(
+                        title="Show locals on traceback",
+                        description="Displays a dictionary of locals when capturing error.",
+                        field_name="show_locals",
                     ),
                 ],
             ),

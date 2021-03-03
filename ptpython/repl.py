@@ -23,13 +23,10 @@ from prompt_toolkit.formatted_text import (
     HTML,
     AnyFormattedText,
     FormattedText,
-    PygmentsTokens,
     StyleAndTextTuples,
-    fragment_list_width,
     merge_formatted_text,
-    to_formatted_text,
 )
-from prompt_toolkit.formatted_text.utils import fragment_list_to_text, split_lines
+from prompt_toolkit.formatted_text.utils import split_lines
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
 from prompt_toolkit.patch_stdout import patch_stdout as patch_stdout_context
 from prompt_toolkit.shortcuts import (
@@ -42,6 +39,9 @@ from prompt_toolkit.styles import BaseStyle
 from prompt_toolkit.utils import DummyContext, get_cwidth
 from pygments.lexers import PythonLexer, PythonTracebackLexer
 from pygments.token import Token
+
+from rich.console import Console
+from rich.traceback import Traceback
 
 from .python_input import PythonInput
 
@@ -77,6 +77,7 @@ class PythonRepl(PythonInput):
     def __init__(self, *a, **kw) -> None:
         self._startup_paths = kw.pop("startup_paths", None)
         super().__init__(*a, **kw)
+        self.console = Console()
         self._load_start_paths()
 
     def _load_start_paths(self) -> None:
@@ -287,91 +288,7 @@ class PythonRepl(PythonInput):
         )
 
     def show_result(self, result: object) -> None:
-        """
-        Show __repr__ for an `eval` result.
-
-        Note: this can raise `KeyboardInterrupt` if either calling `__repr__`,
-              `__pt_repr__` or formatting the output with "Black" takes to long
-              and the user presses Control-C.
-        """
-        out_prompt = to_formatted_text(self.get_output_prompt())
-
-        # If the repr is valid Python code, use the Pygments lexer.
-        try:
-            result_repr = repr(result)
-        except KeyboardInterrupt:
-            raise  # Don't catch here.
-        except BaseException as e:
-            # Calling repr failed.
-            self._handle_exception(e)
-            return
-
-        try:
-            compile(result_repr, "", "eval")
-        except SyntaxError:
-            formatted_result_repr = to_formatted_text(result_repr)
-        else:
-            # Syntactically correct. Format with black and syntax highlight.
-            if self.enable_output_formatting:
-                # Inline import. Slightly speed up start-up time if black is
-                # not used.
-                import black
-
-                result_repr = black.format_str(
-                    result_repr,
-                    mode=black.FileMode(line_length=self.app.output.get_size().columns),
-                )
-
-            formatted_result_repr = to_formatted_text(
-                PygmentsTokens(list(_lex_python_result(result_repr)))
-            )
-
-        # If __pt_repr__ is present, take this. This can return prompt_toolkit
-        # formatted text.
-        try:
-            if hasattr(result, "__pt_repr__"):
-                formatted_result_repr = to_formatted_text(
-                    getattr(result, "__pt_repr__")()
-                )
-                if isinstance(formatted_result_repr, list):
-                    formatted_result_repr = FormattedText(formatted_result_repr)
-        except KeyboardInterrupt:
-            raise  # Don't catch here.
-        except:
-            # For bad code, `__getattr__` can raise something that's not an
-            # `AttributeError`. This happens already when calling `hasattr()`.
-            pass
-
-        # Align every line to the prompt.
-        line_sep = "\n" + " " * fragment_list_width(out_prompt)
-        indented_repr: StyleAndTextTuples = []
-
-        lines = list(split_lines(formatted_result_repr))
-
-        for i, fragment in enumerate(lines):
-            indented_repr.extend(fragment)
-
-            # Add indentation separator between lines, not after the last line.
-            if i != len(lines) - 1:
-                indented_repr.append(("", line_sep))
-
-        # Write output tokens.
-        if self.enable_syntax_highlighting:
-            formatted_output = merge_formatted_text([out_prompt, indented_repr])
-        else:
-            formatted_output = FormattedText(
-                out_prompt + [("", fragment_list_to_text(formatted_result_repr))]
-            )
-
-        if self.enable_pager:
-            self.print_paginated_formatted_text(to_formatted_text(formatted_output))
-        else:
-            self.print_formatted_text(to_formatted_text(formatted_output))
-
-        self.app.output.flush()
-
-        if self.insert_blank_line_after_output:
-            self.app.output.write("\n")
+        self.console.print(result)
 
     def print_formatted_text(
         self, formatted_text: StyleAndTextTuples, end: str = "\n"
@@ -494,48 +411,14 @@ class PythonRepl(PythonInput):
         """
         return create_pager_prompt(self._current_style, self.title)
 
-    def _handle_exception(self, e: BaseException) -> None:
-        output = self.app.output
-
-        # Instead of just calling ``traceback.format_exc``, we take the
-        # traceback and skip the bottom calls of this framework.
+    def _handle_exception(self, _: BaseException) -> None:
         t, v, tb = sys.exc_info()
-
-        # Required for pdb.post_mortem() to work.
-        sys.last_type, sys.last_value, sys.last_traceback = t, v, tb
-
-        tblist = list(traceback.extract_tb(tb))
-
-        for line_nr, tb_tuple in enumerate(tblist):
-            if tb_tuple[0] == "<stdin>":
-                tblist = tblist[line_nr:]
-                break
-
-        l = traceback.format_list(tblist)
-        if l:
-            l.insert(0, "Traceback (most recent call last):\n")
-        l.extend(traceback.format_exception_only(t, v))
-
-        tb_str = "".join(l)
-
-        # Format exception and write to output.
-        # (We use the default style. Most other styles result
-        # in unreadable colors for the traceback.)
-        if self.enable_syntax_highlighting:
-            tokens = list(_lex_python_traceback(tb_str))
-        else:
-            tokens = [(Token, tb_str)]
-
-        print_formatted_text(
-            PygmentsTokens(tokens),
-            style=self._current_style,
-            style_transformation=self.style_transformation,
-            include_default_pygments_style=False,
-            output=output,
-        )
-
-        output.write("%s\n" % e)
-        output.flush()
+        stack = Traceback.extract(t, v, tb.tb_next.tb_next, show_locals=self.show_locals).stacks[0]
+        self.console.print(f"[red bold]{stack.exc_type}: [/red bold]{stack.exc_value} on line {stack.frames[0].lineno}")
+        if self.show_locals:
+            _locals = stack.frames[0].locals
+            self.console.print("Locals: ", end="")
+            self.console.print({k: _locals[k].value_repr for k in list(_locals)[17:]})
 
     def _handle_keyboard_interrupt(self, e: KeyboardInterrupt) -> None:
         output = self.app.output
@@ -554,6 +437,7 @@ class PythonRepl(PythonInput):
             return self
 
         globals["get_ptpython"] = get_ptpython
+        globals["console"] = self.console
 
     def _remove_from_namespace(self) -> None:
         """
