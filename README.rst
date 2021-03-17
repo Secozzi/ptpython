@@ -23,6 +23,11 @@ What this forks covers
 
 This fork integrates ptpython with `rich <https://github.com/willmcgugan/rich>`_ to display output and traceback.
 
+Additional features:
+
+- Removed the bell sound when pressing backspace when the cursor is at the beginning.
+- Added option to show locals on traceback.
+- Added the variable 'prev', a dict holding each previous result to quickly view every underscore number result.
 
 Installation
 ************
@@ -33,7 +38,7 @@ Install it using pip:
 
     pip install ptpython
 
-Start it by typing ``ptpython``.
+Start it by typing ``ptpython`` or ``pyt``.
 
 
 Features

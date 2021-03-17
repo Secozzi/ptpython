@@ -23,10 +23,13 @@ from prompt_toolkit.formatted_text import (
     HTML,
     AnyFormattedText,
     FormattedText,
+    PygmentsTokens,
     StyleAndTextTuples,
+    fragment_list_width,
     merge_formatted_text,
+    to_formatted_text,
 )
-from prompt_toolkit.formatted_text.utils import split_lines
+from prompt_toolkit.formatted_text.utils import fragment_list_to_text, split_lines
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
 from prompt_toolkit.patch_stdout import patch_stdout as patch_stdout_context
 from prompt_toolkit.shortcuts import (
@@ -273,6 +276,7 @@ class PythonRepl(PythonInput):
     def _store_eval_result(self, result: object) -> None:
         locals: Dict[str, Any] = self.get_locals()
         locals["_"] = locals["_%i" % self.current_statement_index] = result
+        locals["prev"]["_%i" % self.current_statement_index] = result
 
     def get_compiler_flags(self) -> int:
         return super().get_compiler_flags() | PyCF_ALLOW_TOP_LEVEL_AWAIT
@@ -288,7 +292,47 @@ class PythonRepl(PythonInput):
         )
 
     def show_result(self, result: object) -> None:
-        self.console.print(result)
+        if hasattr(result, "__pt_repr__"):
+            out_prompt = to_formatted_text(self.get_output_prompt())
+            try:
+                formatted_result_repr = to_formatted_text(
+                    getattr(result, "__pt_repr__")()
+                )
+                if isinstance(formatted_result_repr, list):
+                    formatted_result_repr = FormattedText(formatted_result_repr)
+            except:
+                pass
+            line_sep = "\n" + " " * fragment_list_width(out_prompt)
+            indented_repr: StyleAndTextTuples = []
+
+            lines = list(split_lines(formatted_result_repr))
+
+            for i, fragment in enumerate(lines):
+                indented_repr.extend(fragment)
+
+                # Add indentation separator between lines, not after the last line.
+                if i != len(lines) - 1:
+                    indented_repr.append(("", line_sep))
+
+            # Write output tokens.
+            if self.enable_syntax_highlighting:
+                formatted_output = merge_formatted_text([out_prompt, indented_repr])
+            else:
+                formatted_output = FormattedText(
+                    out_prompt + [("", fragment_list_to_text(formatted_result_repr))]
+                )
+
+            if self.enable_pager:
+                self.print_paginated_formatted_text(to_formatted_text(formatted_output))
+            else:
+                self.print_formatted_text(to_formatted_text(formatted_output))
+
+            self.app.output.flush()
+
+            if self.insert_blank_line_after_output:
+                self.app.output.write("\n")
+        else:
+            self.console.print(result)
 
     def print_formatted_text(
         self, formatted_text: StyleAndTextTuples, end: str = "\n"
@@ -414,7 +458,7 @@ class PythonRepl(PythonInput):
     def _handle_exception(self, _: BaseException) -> None:
         t, v, tb = sys.exc_info()
         stack = Traceback.extract(t, v, tb.tb_next.tb_next, show_locals=self.show_locals).stacks[0]
-        self.console.print(f"[red bold]{stack.exc_type}: [/red bold]{stack.exc_value} on line {stack.frames[0].lineno}")
+        self.console.print(f"[red bold]{stack.exc_type}: [/red bold]'{stack.exc_value}' on line {stack.frames[0].lineno}")
         if self.show_locals:
             _locals = stack.frames[0].locals
             self.console.print("Locals: ", end="")
@@ -438,6 +482,7 @@ class PythonRepl(PythonInput):
 
         globals["get_ptpython"] = get_ptpython
         globals["console"] = self.console
+        globals["prev"] = {}
 
     def _remove_from_namespace(self) -> None:
         """

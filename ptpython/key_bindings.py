@@ -10,6 +10,7 @@ from prompt_toolkit.filters import (
     vi_insert_mode,
 )
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.key_binding.bindings.basic import if_no_repeat
 from prompt_toolkit.key_binding.bindings.named_commands import get_by_name
 from prompt_toolkit.keys import Keys
 
@@ -66,6 +67,10 @@ def load_python_bindings(python_input):
     # (WORD=False).
     handle("c-w")(get_by_name("backward-kill-word"))
 
+    @handle("f1")
+    def _(event):
+        print("Show error")
+
     @handle("f2")
     def _(event):
         """
@@ -106,6 +111,17 @@ def load_python_bindings(python_input):
         When tab should insert whitespace, do that instead of completion.
         """
         event.app.current_buffer.insert_text("    ")
+
+    @handle(
+        "backspace",
+        filter=(vi_insert_mode | emacs_insert_mode),
+        save_before=if_no_repeat
+    )
+    def _(event):
+        if event.arg < 0:
+            deleted = event.current_buffer.delete(count=-event.arg)
+        else:
+            deleted = event.current_buffer.delete_before_cursor(count=event.arg)
 
     @Condition
     def is_multiline():
