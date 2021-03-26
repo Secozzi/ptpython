@@ -27,7 +27,8 @@ Additional features:
 
 - Removed the bell sound when pressing backspace when the cursor is at the beginning.
 - Added option to show locals on traceback.
-- Added the variable 'prev', a dict holding each previous result to quickly view every underscore number result.
+- Added the variable 'prev', a dict holding each previous result to quickly view every "underscore number" result.
+- Added short cut for removing four characters (ctrl+left)
 
 Installation
 ************

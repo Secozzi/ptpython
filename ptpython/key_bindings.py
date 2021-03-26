@@ -123,6 +123,16 @@ def load_python_bindings(python_input):
         else:
             deleted = event.current_buffer.delete_before_cursor(count=event.arg)
 
+    @handle(
+        "c-left",
+        filter=(vi_insert_mode | emacs_insert_mode)
+    )
+    def _(event):
+        if event.arg < 0:
+            deleted = event.current_buffer.delete(count=-4)
+        else:
+            deleted = event.current_buffer.delete_before_cursor(count=4)
+
     @Condition
     def is_multiline():
         return document_is_multiline_python(python_input.default_buffer.document)
