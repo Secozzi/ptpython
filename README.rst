@@ -29,6 +29,18 @@ Additional features:
 - Added option to show locals on traceback.
 - Added the variable 'prev', a dict holding each previous result to quickly view every "underscore number" result.
 - Added short cut for removing four characters (ctrl+left)
+- Added formatter function to format output. The function is located in the config.py file. An example of a formatter is:
+
+.. code:: python
+
+    def formatter(input: object) -> object:
+        """
+        Every number will be given underscores, such as
+        1234567 -> 1_234_567
+        """"
+        if type(input) == int or type(input) == float:
+            input = f"{input:_}"
+        return input
 
 Installation
 ************

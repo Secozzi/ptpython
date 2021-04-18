@@ -42,6 +42,7 @@ from prompt_toolkit.utils import DummyContext, get_cwidth
 from pygments.lexers import PythonLexer, PythonTracebackLexer
 from pygments.token import Token
 
+from appdirs import user_data_dir
 from rich.console import Console
 from rich.traceback import Traceback
 
@@ -80,6 +81,7 @@ class PythonRepl(PythonInput):
         self._startup_paths = kw.pop("startup_paths", None)
         super().__init__(*a, **kw)
         self.console = Console()
+        self._formatter = get_formatter()
         self._load_start_paths()
 
     def _load_start_paths(self) -> None:
@@ -331,6 +333,8 @@ class PythonRepl(PythonInput):
             if self.insert_blank_line_after_output:
                 self.app.output.write("\n")
         else:
+            if self._formatter:
+                result = self._formatter(result)
             self.console.print(result)
 
     def print_formatted_text(
@@ -508,6 +512,35 @@ def enable_deprecation_warnings() -> None:
          library on Python 2.7.
     """
     warnings.filterwarnings("default", category=DeprecationWarning, module="__main__")
+
+
+def get_formatter() -> Callable:
+
+    config_folder = user_data_dir("ptpython", "prompt_toolkit")
+    config_file = config_folder + "\\config.py"
+
+    def enter_to_continue() -> None:
+        input("\nPress ENTER to continue...")
+
+    # Check whether this file exists.
+    if not os.path.exists(config_file):
+        print("Impossible to read %r" % config_file)
+        enter_to_continue()
+        return
+
+    try:
+        namespace: Dict[str, Any] = {}
+
+        with open(config_file, "rb") as f:
+            code = compile(f.read(), config_file, "exec")
+            exec(code, namespace, namespace)
+
+        if "formatter" in namespace:
+            return namespace["formatter"]
+
+    except Exception:
+        traceback.print_exc()
+        enter_to_continue()
 
 
 def run_config(repl: PythonInput, config_file: str = "~/.ptpython/config.py") -> None:
